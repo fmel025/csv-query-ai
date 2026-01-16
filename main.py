@@ -12,15 +12,14 @@ def handle_file_upload(file):
 def main():
     with gr.Blocks(title="Ephemeral CSV Query AI") as app:
         gr.Markdown("# Ephemeral CSV Query AI")
-        gr.Markdown("Upload a CSV file to get started.")
+        gr.Markdown("### Upload a CSV file to get started.")
 
         db_state = gr.State()
         description_state = gr.State()
 
         with gr.Tab("Upload CSV", visible=True):
-            csv_file = gr.File(
-                label="Upload CSV"
-            )
+            csv_file = gr.File(label="Upload CSV", file_types=[".csv"], type="filepath")
+            button = gr.Button("Submit")
 
         # with gr.Row():
         #     file_input = gr.File(
