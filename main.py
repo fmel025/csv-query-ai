@@ -12,7 +12,12 @@ def handle_file_upload(file):
 
 def handle_csv_submit(file):
     if file is None:
-        return None, gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
+        return (
+            None,
+            gr.update(visible=True),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
     # In memory duck db
     conn = duckdb.connect(":memory:")
     # Load csv data to duckdb
@@ -24,12 +29,46 @@ def handle_csv_submit(file):
     print(columns)
 
     # Hide upload, show description, keep chat hidden
-    return conn, gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
+    return (
+        conn,
+        gr.update(visible=False),
+        gr.update(visible=True),
+        gr.update(visible=False),
+    )
 
 
 def handle_description_submit(description):
     # Hide description, show chat
     return description, gr.update(visible=False), gr.update(visible=True)
+
+
+def add_user_message(user_message, history):
+    """Add user message to chat history."""
+    if not user_message:
+        return history, ""
+    history = history or []
+    history.append({"role": "user", "content": user_message})
+    return history, ""
+
+
+def generate_response(history, db_conn, description):
+    """Generate bot response and add to history."""
+    if not history:
+        return history
+    
+    print(history)
+    # Get the last user message
+    user_message = history[-1]["content"]
+    
+    # TODO: Add your agent logic here
+    # You have access to:
+    # - user_message: the user's question
+    # - db_conn: the DuckDB connection with the data
+    # - description: the dataset description
+    bot_response = f"You asked: {user_message}"  # Placeholder
+    
+    history.append({"role": "assistant", "content": bot_response})
+    return history
 
 
 def main():
@@ -61,7 +100,11 @@ def main():
         # Step 3: Chat
         with gr.Column(visible=False) as step_chat:
             gr.Markdown("### Step 3: Chat with your data")
-            # Chat UI will go here
+            chatbot = gr.Chatbot(label="Chat")
+            user_input = gr.Textbox(
+                placeholder="Ask something about your data...", label="Your message"
+            )
+            send_button = gr.Button("Send")
 
         # Wire up navigation
         upload_btn.click(
@@ -74,6 +117,28 @@ def main():
             fn=handle_description_submit,
             inputs=[description_input],
             outputs=[description_state, step_description, step_chat],
+        )
+
+        # Chat handlers - chain user message then bot response
+        send_button.click(
+            fn=add_user_message,
+            inputs=[user_input, chatbot],
+            outputs=[chatbot, user_input],
+        ).then(
+            fn=generate_response,
+            inputs=[chatbot, db_state, description_state],
+            outputs=[chatbot],
+        )
+
+        # Also trigger on Enter key
+        user_input.submit(
+            fn=add_user_message,
+            inputs=[user_input, chatbot],
+            outputs=[chatbot, user_input],
+        ).then(
+            fn=generate_response,
+            inputs=[chatbot, db_state, description_state],
+            outputs=[chatbot],
         )
 
     app.launch()
