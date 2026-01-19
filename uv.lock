@@ -53,12 +53,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "gradio" },
+    { name = "pandas" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.4.3" },
     { name = "gradio", specifier = ">=6.3.0" },
+    { name = "pandas", specifier = ">=2.3.3" },
 ]
 
 [[package]]
