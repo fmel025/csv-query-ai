@@ -37,3 +37,6 @@ def get_weather():
 
 
 agent = create_agent(model=model, system_prompt=system_prompt, tools=[get_weather])
+
+response = agent.invoke({"messages": [("user", "What's the weather today?")]})  # pyright: ignore[reportArgumentType]
+print("Agent response:", response['messages'][-1])
