@@ -4,39 +4,35 @@ from duckdb import DuckDBPyConnection
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 
+import yaml
 import os
 
 load_dotenv()
 
-api_url = os.getenv("OPENROUTER_API_URL")
-api_key = os.getenv("OPENROUTER_API_KEY")
-model_name = os.getenv("OPENROUTER_MODEL")
-
 
 def build_agent(duck_db_connection: DuckDBPyConnection):
-    pass
+    api_url = os.getenv("OPENROUTER_API_URL")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    model_name = os.getenv("OPENROUTER_MODEL")
 
+    # Load prompts from YAML file
+    with open("prompts.yaml", "r") as f:
+        prompts = yaml.safe_load(f)
 
-system_prompt = f"""
-You are a data assistant querying a DuckDB table called `data`.
-And also you can check weather.
+    system_prompt = prompts["system_prompt"].format(schema="")
 
-Rules:
-- Always use SQL via the tool for data questions
-- Never hallucinate results
-- Use LIMIT by default
-"""
+    model = ChatOpenAI(
+        model=model_name, api_key=api_key, base_url=api_url, temperature=0.5
+    )
 
-model = ChatOpenAI(model=model_name, api_key=api_key, base_url=api_url, temperature=0.5)
+    @tool
+    def run_sql(query: str) -> str:
+        """Run a SQL query against the DuckDB database."""
+        return duck_db_connection.execute(query).fetchall()
 
+    agent = create_agent(model=model, system_prompt=system_prompt, tools=[run_sql])
 
-@tool
-def get_weather():
-    """Gives the current weather information"""
-    return "The weather is rainy"
+    response = agent.invoke({"messages": [("user", "What is your purpose?")]})
+    print("Agent response:", response["messages"][-1].content)
 
-
-agent = create_agent(model=model, system_prompt=system_prompt, tools=[get_weather])
-
-response = agent.invoke({"messages": [("user", "What's the weather today?")]})  # pyright: ignore[reportArgumentType]
-print("Agent response:", response['messages'][-1])
+    return agent
