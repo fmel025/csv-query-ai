@@ -18,13 +18,17 @@ def build_agent(duck_db_connection: DuckDBPyConnection):
     # Load prompts from YAML file
     with open("prompts.yaml", "r") as f:
         prompts = yaml.safe_load(f)
-        
+
     schema = duck_db_connection.execute("DESCRIBE data").df().to_markdown(index=False)
 
     system_prompt = prompts["system_prompt"].format(schema=schema)
 
     model = ChatOpenAI(
-        model=model_name, api_key=api_key, base_url=api_url, temperature=0.5
+        model=model_name,
+        api_key=api_key,
+        base_url=api_url,
+        temperature=0.5,
+        max_tokens=1000,
     )
 
     @tool(response_format="content_and_artifact")
