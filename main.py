@@ -1,7 +1,7 @@
 import gradio as gr
 import duckdb
 import pandas as pd
-
+from agent import build_agent
 
 def handle_file_upload(file):
     """Handle the uploaded CSV file."""
@@ -24,9 +24,6 @@ def handle_csv_submit(file):
     df = pd.read_csv(file.name)
     conn.register("data", df)
 
-    columns_query = "SELECT column_name FROM (DESCRIBE data)"
-    columns = conn.execute(columns_query).fetchdf()["column_name"].tolist()
-    print(columns)
 
     # Hide upload, show description, keep chat hidden
     return (
@@ -37,9 +34,10 @@ def handle_csv_submit(file):
     )
 
 
-def handle_description_submit(description):
+def handle_description_submit(description, db_conn):
+    agent = build_agent(db_conn)
     # Hide description, show chat
-    return description, gr.update(visible=False), gr.update(visible=True)
+    return description, agent, gr.update(visible=False), gr.update(visible=True)    
 
 
 def add_user_message(user_message, history):
@@ -51,21 +49,20 @@ def add_user_message(user_message, history):
     return history, ""
 
 
-def generate_response(history, db_conn, description):
+def generate_response(history, agent, description):
     """Generate bot response and add to history."""
     if not history:
         return history
     
-    print(history)
     # Get the last user message
     user_message = history[-1]["content"]
     
     # TODO: Add your agent logic here
-    # You have access to:
-    # - user_message: the user's question
-    # - db_conn: the DuckDB connection with the data
-    # - description: the dataset description
-    bot_response = f"You asked: {user_message}"  # Placeholder
+    agent_response = agent.invoke({"messages": [("user", user_message)]})
+    
+    print(agent_response["messages"][-1])
+
+    bot_response = agent_response["messages"][-1].content
     
     history.append({"role": "assistant", "content": bot_response})
     return history
@@ -80,6 +77,7 @@ def main():
 
         db_state = gr.State()
         description_state = gr.State()
+        agent_state = gr.State()
 
         # Step 1: Upload CSV
         with gr.Column(visible=True) as step_upload:
@@ -115,8 +113,8 @@ def main():
 
         desc_btn.click(
             fn=handle_description_submit,
-            inputs=[description_input],
-            outputs=[description_state, step_description, step_chat],
+            inputs=[description_input, db_state],
+            outputs=[description_state, agent_state, step_description, step_chat],
         )
 
         # Chat handlers - chain user message then bot response
@@ -126,7 +124,7 @@ def main():
             outputs=[chatbot, user_input],
         ).then(
             fn=generate_response,
-            inputs=[chatbot, db_state, description_state],
+            inputs=[chatbot, agent_state, description_state],
             outputs=[chatbot],
         )
 
@@ -137,7 +135,7 @@ def main():
             outputs=[chatbot, user_input],
         ).then(
             fn=generate_response,
-            inputs=[chatbot, db_state, description_state],
+            inputs=[chatbot, agent_state, description_state],
             outputs=[chatbot],
         )
 
