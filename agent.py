@@ -19,9 +19,27 @@ def build_agent(duck_db_connection: DuckDBPyConnection):
     with open("prompts.yaml", "r") as f:
         prompts = yaml.safe_load(f)
 
-    schema = duck_db_connection.execute("DESCRIBE data").df().to_markdown(index=False)
 
-    system_prompt = prompts["system_prompt"].format(schema=schema)
+    # 1. Obtener la estructura
+    df_schema = duck_db_connection.execute("DESCRIBE data").df()
+
+    # 2. Crear una representación tipo SQL (más fácil de entender para GPT-3.5)
+    ddl_columns = ",\n  ".join([f"{row['column_name']} {row['column_type']}" for _, row in df_schema.iterrows()])
+
+    # 3. Obtener una muestra representativa (esto es VITAL para modelos menores)
+    sample_rows = duck_db_connection.execute("SELECT * FROM data LIMIT 3").df().to_markdown(index=False)
+
+    schema_context = f"""
+    ### ESTRUCTURA DE LA TABLA `data`:
+    CREATE TABLE data (
+    {ddl_columns}
+    );
+
+    ### EJEMPLO DE DATOS (Primeras 3 filas):
+    {sample_rows}
+    """
+    
+    system_prompt = prompts["system_prompt"].format(schema=schema_context)
 
     model = ChatOpenAI(
         model=model_name,
@@ -32,17 +50,12 @@ def build_agent(duck_db_connection: DuckDBPyConnection):
     )
 
     @tool(response_format="content_and_artifact")
-    def run_sql(query: str) -> dict[str, str]:
+    def run_sql(query: str):
         """Run a SQL query against the DuckDB database."""
+        print(f"Running SQL query: {query}")
         result = duck_db_connection.execute(query).df()
-        return {
-            "content": "Here is the result of the query:",
-            "artifact": result,
-        }
+        return "Here is the result of the query:", { "result": result.to_markdown(index=False) }
 
     agent = create_agent(model=model, system_prompt=system_prompt, tools=[run_sql])
-
-    response = agent.invoke({"messages": [("user", "What is your purpose?")]})
-    print("Agent response:", response["messages"][-1].content)
 
     return agent
